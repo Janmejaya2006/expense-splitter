@@ -1,0 +1,29 @@
+{
+  "name": "expense-split-ocr",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "node --experimental-default-type=module --test tests/*.test.js"
+  },
+  "dependencies": {
+    "next": "^16.2.1",
+    "nodemailer": "^8.0.3",
+    "qrcode.react": "^4.2.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "recharts": "^3.8.0",
+    "resend": "^6.9.4",
+    "tesseract.js": "^7.0.0",
+    "twilio": "^5.13.0",
+    "web-push": "^3.6.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.1.6"
+  }
+}

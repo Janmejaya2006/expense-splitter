@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#g)"/>
+  <circle cx="96" cy="96" r="64" fill="rgba(255,255,255,0.16)"/>
+  <path d="M62 70h68v10H62zm0 21h52v10H62zm0 21h44v10H62z" fill="#ffffff"/>
+  <text x="124" y="130" font-size="46" font-weight="700" text-anchor="middle" fill="#ffffff">₹</text>
+</svg>
