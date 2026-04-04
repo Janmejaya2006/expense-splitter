@@ -6,7 +6,7 @@ Use this checklist before each production release.
 - Set all secrets in your deployment platform secret manager (never in git):
   - `AUTH_SECRET` (32+ chars)
   - `GOOGLE_OAUTH_CLIENT_SECRET`
-  - `RESEND_API_KEY` or Gmail SMTP credentials
+  - Gmail SMTP credentials: `GMAIL_USER`, `GMAIL_APP_PASSWORD`
   - Payment provider secrets (`RAZORPAY_KEY_SECRET`, `STRIPE_SECRET_KEY`, `PAYPAL_CLIENT_SECRET`)
   - `WEB_PUSH_VAPID_PRIVATE_KEY`
   - `JOB_RUNNER_SECRET`, `NOTIFICATION_WEBHOOK_SECRET`

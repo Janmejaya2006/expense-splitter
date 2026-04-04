@@ -58,6 +58,7 @@ Create `.env.local`:
 ```bash
 # Required
 AUTH_SECRET=replace-with-a-long-random-secret
+# Optional auth toggles (auto-disabled if Gmail delivery is not configured)
 AUTH_2FA_ENABLED=true
 AUTH_REQUIRE_EMAIL_VERIFICATION=true
 
@@ -70,9 +71,9 @@ GOOGLE_OAUTH_REDIRECT_URI=
 # Optional DB toggle: sqlite (default), json, postgres (scaffold only)
 APP_DB_BACKEND=sqlite
 
-# Email (Resend)
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxx
-EMAIL_FROM="Expense Split <noreply@your-domain.com>"
+# Email (Gmail SMTP)
+GMAIL_USER=you@gmail.com
+GMAIL_APP_PASSWORD=your-16-char-app-password
 
 # SMS / WhatsApp (Twilio)
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxx
