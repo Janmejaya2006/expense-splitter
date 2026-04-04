@@ -1,5 +1,6 @@
 import "./globals.css";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata = {
   title: "Expense Split + Receipt OCR",
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
       <body>
         <ServiceWorkerRegistration />
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
