@@ -70,6 +70,7 @@ export async function POST(request) {
         ? `${new URL(request.url).origin}/verify-email/${verification.token}`
         : "";
       let delivery = { status: "sent" };
+      let verificationPreviewUrl = "";
       if (verifyLink) {
         try {
           await sendEmailVerificationEmail({
@@ -77,7 +78,15 @@ export async function POST(request) {
             verifyLink,
           });
         } catch (error) {
-          delivery = { status: "failed", message: error.message || "Email delivery failed" };
+          if (process.env.NODE_ENV !== "production") {
+            delivery = {
+              status: "preview",
+              message: "Email provider unavailable in development. Use preview verification link.",
+            };
+            verificationPreviewUrl = verifyLink;
+          } else {
+            delivery = { status: "failed", message: error.message || "Email delivery failed" };
+          }
         }
       }
 
@@ -87,6 +96,7 @@ export async function POST(request) {
           user,
           requiresEmailVerification: true,
           verificationDelivery: delivery,
+          verificationPreviewUrl,
         },
         { status: 201 }
       );

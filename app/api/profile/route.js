@@ -25,7 +25,23 @@ function sanitizePreferences(input, previous = {}) {
       source.productUpdates !== undefined ? Boolean(source.productUpdates) : previous.productUpdates !== false,
     settlementAlerts:
       source.settlementAlerts !== undefined ? Boolean(source.settlementAlerts) : previous.settlementAlerts !== false,
+    weeklySummary:
+      source.weeklySummary !== undefined ? Boolean(source.weeklySummary) : previous.weeklySummary !== false,
   };
+}
+
+function isAllowedAvatarValue(value) {
+  const candidate = String(value || "").trim();
+  if (!candidate) return true;
+
+  const lower = candidate.toLowerCase();
+  if (lower.startsWith("data:image/png;base64,")) return true;
+  if (lower.startsWith("data:image/jpeg;base64,")) return true;
+  if (lower.startsWith("data:image/jpg;base64,")) return true;
+  if (lower.startsWith("data:image/webp;base64,")) return true;
+  if (/^https?:\/\/\S+$/i.test(candidate)) return true;
+  if (candidate.startsWith("/")) return true;
+  return false;
 }
 
 const profilePatchSchema = z
@@ -37,6 +53,12 @@ const profilePatchSchema = z
       .trim()
       .refine((value) => !value || /^\+?[0-9][0-9\s-]{6,19}$/.test(value), "Enter a valid contact number")
       .optional(),
+    avatarUrl: z
+      .string()
+      .trim()
+      .max(400_000, "Profile picture is too large")
+      .refine((value) => isAllowedAvatarValue(value), "Use PNG, JPG, WEBP, or an image URL")
+      .optional(),
     notificationPreferences: z
       .object({
         email: z.boolean().optional(),
@@ -44,6 +66,7 @@ const profilePatchSchema = z
         whatsapp: z.boolean().optional(),
         productUpdates: z.boolean().optional(),
         settlementAlerts: z.boolean().optional(),
+        weeklySummary: z.boolean().optional(),
       })
       .optional(),
   })
@@ -77,10 +100,12 @@ export async function PATCH(request) {
     const hasName = body.name !== undefined;
     const hasEmail = body.email !== undefined;
     const hasPhone = body.phone !== undefined;
+    const hasAvatar = body.avatarUrl !== undefined;
     const hasPrefs = body.notificationPreferences !== undefined;
     const nextName = hasName ? body.name : undefined;
     const nextEmail = hasEmail ? normalizeEmail(body.email) : undefined;
     const nextPhone = hasPhone ? body.phone : undefined;
+    const nextAvatarUrl = hasAvatar ? String(body.avatarUrl || "").trim().slice(0, 400_000) : undefined;
 
     let updatedUser = null;
     let emailChanged = false;
@@ -109,6 +134,7 @@ export async function PATCH(request) {
         }
       }
       if (hasPhone) user.phone = nextPhone;
+      if (hasAvatar) user.avatarUrl = nextAvatarUrl;
       if (hasPrefs) {
         user.notificationPreferences = sanitizePreferences(body.notificationPreferences, user.notificationPreferences);
       }

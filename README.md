@@ -24,11 +24,14 @@ Full-stack Next.js app for group expense tracking, settlement workflows, invite-
 - Spending charts (bar + pie), member leaderboard, and activity feed
 - Expense comments for clarification
 - Monthly summary email dispatch during maintenance runs
+- Weekly summary email dispatch during maintenance runs (respects user notification preference)
 - Browser Web Push notifications (service worker + VAPID)
 - Multi-currency expense input with auto-conversion to group currency
 - PWA installability + offline fallback support
 - Background maintenance endpoint for invite expiry + queue processing
-- API abuse protection with rate limiting and secure middleware controls
+- API abuse protection with rate limiting and secure proxy controls
+- Global search API across groups/expenses/activity
+- Saved expense filter presets per user
 
 ## Stack
 
@@ -44,6 +47,8 @@ npm run dev
 npm run lint
 npm test
 npm run build
+npm run security:scan
+npm run verify
 ```
 
 ## Environment
@@ -55,6 +60,12 @@ Create `.env.local`:
 AUTH_SECRET=replace-with-a-long-random-secret
 AUTH_2FA_ENABLED=true
 AUTH_REQUIRE_EMAIL_VERIFICATION=true
+
+# Optional: Google OAuth login
+GOOGLE_OAUTH_CLIENT_ID=xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxx
+# Optional override; defaults to <app-origin>/api/auth/google/callback
+GOOGLE_OAUTH_REDIRECT_URI=
 
 # Optional DB toggle: sqlite (default), json, postgres (scaffold only)
 APP_DB_BACKEND=sqlite
@@ -88,21 +99,33 @@ WEB_PUSH_VAPID_SUBJECT=mailto:noreply@your-domain.com
 - `AUTH_SECRET` must be a long random secret (32+ chars); production requires it.
 - Keep the database on private network access only (localhost/VPC). Never expose DB ports publicly.
 - API routes are protected by auth + per-resource ownership checks to prevent IDOR.
-- Global API middleware enforces HTTPS in production and applies rate limits.
+- Global API proxy enforces HTTPS in production and applies rate limits.
+- API proxy adds request IDs and route-level rate-limit policy headers.
 - Password reset and email verification tokens are hashed at rest and expire automatically.
+- Google OAuth secrets are read server-side only (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`) and are never exposed to the frontend.
 - In production, configure `JOB_RUNNER_SECRET` and `NOTIFICATION_WEBHOOK_SECRET`; those endpoints reject unauthenticated secret-less access.
 - Monitor logs for `auth.*`, `security.rate_limit_blocked`, and `security.https_required_blocked` events to detect abuse.
+- Run `npm run security:scan` before pushing to catch accidental secret commits.
+- Production rollout checklist: [`DEPLOYMENT_CHECKLIST.md`](/Users/janmejayabiswal/untitled%20folder/expense-split-ocr/DEPLOYMENT_CHECKLIST.md)
 
 ## Operational Endpoints
 
 - `GET /api/health/config`  
   Returns config readiness summary.
+- `GET /api/health/ops`  
+  Returns authenticated operational snapshot (queue health, counts, and latency signals).
+- `GET /api/auth/google/start`, `GET /api/auth/google/callback`  
+  Handles Google OAuth sign-in handshake and session creation.
 - `POST /api/jobs/maintenance`  
-  Runs invite-expiry cleanup, recurring-expense generation, monthly summary emails, and queued notification processing.
+  Runs invite-expiry cleanup, recurring-expense generation, weekly/monthly summary emails, and queued notification processing.
 - `POST /api/notifications/webhook`  
   Syncs provider delivery status into notification history.
 - `GET /api/push/public-key`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe`  
   Handles browser push subscription lifecycle for logged-in users.
+- `GET /api/search`  
+  Authenticated global search over accessible groups, expenses, and activity.
+- `GET/POST /api/expenses/filters`, `DELETE /api/expenses/filters/:filterId`  
+  Saved filter presets for the logged-in user.
 
 ## Testing and CI
 
@@ -110,6 +133,7 @@ WEB_PUSH_VAPID_SUBJECT=mailto:noreply@your-domain.com
 - GitHub Actions workflow: [`.github/workflows/ci.yml`](/Users/janmejayabiswal/untitled%20folder/expense-split-ocr/.github/workflows/ci.yml)
   - `npm ci`
   - `npm run lint`
+  - `npm run security:scan`
   - `npm test`
   - `npm run build`
 

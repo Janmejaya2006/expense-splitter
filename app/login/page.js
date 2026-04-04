@@ -8,7 +8,7 @@ export default async function LoginPage() {
   const session = getSessionFromCookieStore(cookieStore);
 
   if (session) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return <LoginForm />;

@@ -116,6 +116,35 @@ export async function POST(request, { params }) {
     let savedInvite = null;
 
     await updateDB((draft) => {
+      if (!hasGroupPermission(draft, groupId, session, "inviteMembers")) {
+        throw new Error("FORBIDDEN");
+      }
+
+      const groupExists = (draft.groups || []).some((item) => Number(item.id) === groupId);
+      if (!groupExists) {
+        throw new Error("NOT_FOUND");
+      }
+
+      const liveMemberExists = (draft.members || []).some(
+        (item) => Number(item.groupId) === groupId && normalizeEmail(item.email) === email
+      );
+      if (liveMemberExists) {
+        throw new Error("ALREADY_MEMBER");
+      }
+
+      const nowMs = Date.now();
+      const duplicateInviteExists = (draft.groupInvites || []).some((item) => {
+        if (Number(item.groupId) !== groupId) return false;
+        if (normalizeEmail(item.email) !== email) return false;
+        const status = String(item.status || "pending").toLowerCase();
+        if (status !== "pending") return false;
+        const expiresAtMs = new Date(item.expiresAt || 0).getTime();
+        return !Number.isFinite(expiresAtMs) || expiresAtMs > nowMs;
+      });
+      if (duplicateInviteExists) {
+        throw new Error("INVITE_EXISTS");
+      }
+
       const id = Number(draft.meta.nextGroupInviteId);
       draft.meta.nextGroupInviteId += 1;
 
@@ -153,6 +182,9 @@ export async function POST(request, { params }) {
     }
 
     await updateDB((draft) => {
+      if (!hasGroupPermission(draft, groupId, session, "inviteMembers")) {
+        throw new Error("FORBIDDEN");
+      }
       const invite = (draft.groupInvites || []).find(
         (item) =>
           Number(item.groupId) === groupId &&
@@ -174,6 +206,18 @@ export async function POST(request, { params }) {
   } catch (error) {
     const response = validationErrorResponse(error);
     if (response) return response;
+    if (error.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Access denied for this group" }, { status: 403 });
+    }
+    if (error.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
+    if (error.message === "ALREADY_MEMBER") {
+      return NextResponse.json({ error: "This email is already a member of the group" }, { status: 409 });
+    }
+    if (error.message === "INVITE_EXISTS") {
+      return NextResponse.json({ error: "An active invite already exists for this email" }, { status: 409 });
+    }
     return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
   }
 }

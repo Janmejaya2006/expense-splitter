@@ -6,6 +6,8 @@ import { storeExpenseProof } from "@/lib/proofStorage";
 import { detectExpenseCategory } from "@/lib/category";
 import { hasWebPushConfig, sendWebPushBatch } from "@/lib/webPush";
 import { convertAmountToCurrency, normalizeCurrencyCode } from "@/lib/fx";
+import { findPotentialDuplicateExpense } from "@/lib/expenseDuplicates";
+import { consumeRateLimit, getClientIp } from "@/lib/rateLimit";
 import { parseRequestBody, parseRouteParams, parseWithSchema, validationErrorResponse } from "@/lib/validation";
 import { z } from "zod";
 
@@ -40,6 +42,7 @@ const expenseCreateSchema = z.object({
     })
     .optional()
     .nullable(),
+  allowDuplicate: z.boolean().optional().default(false),
   proof: z
     .object({
       name: z.string().trim().max(180, "Proof file name is too long").optional().default(""),
@@ -85,6 +88,14 @@ const expenseListQuerySchema = z.object({
 async function resolveGroupId(paramsPromise) {
   const params = await parseRouteParams(paramsPromise, groupParamsSchema);
   return Number(params.id);
+}
+
+function rateLimitResponse(retryAfterMs, errorMessage = "Too many requests. Please try again later.") {
+  const seconds = Math.max(1, Math.ceil(Number(retryAfterMs || 0) / 1000));
+  return NextResponse.json(
+    { error: errorMessage },
+    { status: 429, headers: { "Retry-After": String(seconds) } }
+  );
 }
 
 function parseSplitConfig(splitMode, payload) {
@@ -263,6 +274,37 @@ export async function POST(request, { params }) {
 
   try {
     const groupId = await resolveGroupId(params);
+    const userId = Number(session.userId || 0);
+    const ip = getClientIp(request);
+
+    const userLimit = consumeRateLimit({
+      key: `groups:${groupId}:expenses:create:user:${userId}`,
+      limit: 45,
+      windowMs: 5 * 60 * 1000,
+      blockDurationMs: 2 * 60 * 1000,
+    });
+    if (!userLimit.allowed) {
+      return rateLimitResponse(
+        userLimit.retryAfterMs,
+        "Too many expense creation attempts. Please wait and try again."
+      );
+    }
+
+    const hasClientIp = ip && ip !== "0.0.0.0";
+    if (hasClientIp) {
+      const ipLimit = consumeRateLimit({
+        key: `groups:${groupId}:expenses:create:ip:${ip}`,
+        limit: 120,
+        windowMs: 5 * 60 * 1000,
+        blockDurationMs: 2 * 60 * 1000,
+      });
+      if (!ipLimit.allowed) {
+        return rateLimitResponse(
+          ipLimit.retryAfterMs,
+          "Too many expense creation attempts from this network. Please wait and try again."
+        );
+      }
+    }
 
     const existingDb = await readDB();
     if (!hasGroupPermission(existingDb, groupId, session, "addExpense")) {
@@ -282,6 +324,7 @@ export async function POST(request, { params }) {
     const requestedCategory = body.category;
     const expenseDate = body.expenseDate;
     const notes = body.notes;
+    const allowDuplicate = Boolean(body.allowDuplicate);
     const category =
       !requestedCategory || requestedCategory.toLowerCase() === "auto"
         ? detectExpenseCategory({ title, notes, fallback: "Misc" })
@@ -329,6 +372,25 @@ export async function POST(request, { params }) {
     }
 
     const amount = Number(conversion.convertedAmount || 0);
+    const duplicateCandidate = {
+      title,
+      amount,
+      payerMemberId,
+      participants,
+      expenseDate: expenseDate || nowISO().slice(0, 10),
+    };
+
+    const earlyDuplicate = findPotentialDuplicateExpense(existingGroup.expenses || [], duplicateCandidate);
+    if (earlyDuplicate && !allowDuplicate) {
+      return NextResponse.json(
+        {
+          error: "Possible duplicate expense detected. Confirm and retry to continue.",
+          code: "DUPLICATE_EXPENSE",
+          duplicate: earlyDuplicate,
+        },
+        { status: 409 }
+      );
+    }
 
     let storedProof = null;
     if (proofBase64) {
@@ -357,6 +419,18 @@ export async function POST(request, { params }) {
       for (const memberId of participants) {
         if (!validMembers.includes(memberId)) {
           throw new Error("INVALID_PARTICIPANT");
+        }
+      }
+
+      if (!allowDuplicate) {
+        const liveDuplicate = findPotentialDuplicateExpense(
+          (draft.expenses || []).filter((item) => Number(item.groupId) === groupId),
+          duplicateCandidate
+        );
+        if (liveDuplicate) {
+          const duplicateError = new Error("DUPLICATE_EXPENSE");
+          duplicateError.duplicate = liveDuplicate;
+          throw duplicateError;
         }
       }
 
@@ -513,6 +587,16 @@ export async function POST(request, { params }) {
 
     if (error.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Access denied for this group" }, { status: 403 });
+    }
+    if (error.message === "DUPLICATE_EXPENSE") {
+      return NextResponse.json(
+        {
+          error: "Possible duplicate expense detected. Confirm and retry to continue.",
+          code: "DUPLICATE_EXPENSE",
+          duplicate: error?.duplicate || null,
+        },
+        { status: 409 }
+      );
     }
 
     return NextResponse.json({ error: "Failed to add expense" }, { status: 500 });

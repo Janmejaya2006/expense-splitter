@@ -8,7 +8,7 @@ export default async function RegisterPage() {
   const session = getSessionFromCookieStore(cookieStore);
 
   if (session) {
-    redirect("/");
+    redirect("/dashboard");
   }
 
   return <RegisterForm />;

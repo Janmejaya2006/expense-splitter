@@ -25,7 +25,7 @@ export default function RegisterForm() {
     setNotice("");
 
     if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords do not match.");
       return;
     }
 
@@ -49,15 +49,21 @@ export default function RegisterForm() {
       }
 
       if (body.requiresEmailVerification) {
+        setNotice("Account created. Verify your email, then login.");
         setForm(EMPTY_REGISTER_FORM);
-        setNotice("Account created. Check your email for a verification link before logging in.");
-        router.replace("/login");
-        router.refresh();
+        setTimeout(() => {
+          router.replace("/login");
+          router.refresh();
+        }, 900);
         return;
       }
 
-      router.replace("/");
-      router.refresh();
+      setNotice("Account created successfully. Redirecting to login...");
+      setForm(EMPTY_REGISTER_FORM);
+      setTimeout(() => {
+        router.replace("/login");
+        router.refresh();
+      }, 700);
     } catch (err) {
       setError(err.message || "Registration failed");
     } finally {
@@ -67,50 +73,66 @@ export default function RegisterForm() {
 
   return (
     <main className="auth-shell">
-      <section className="auth-card">
+      <section className="auth-card auth-card-compact">
         <div className="auth-heading">
           <p className="eyebrow">Create Account</p>
-          <h1>Register for Expense Split</h1>
-          <p>Create your account and verify your email to activate login.</p>
+          <h1>Register</h1>
+          <p>Create your account to start splitting expenses with your group.</p>
         </div>
 
         <form className="stack" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Full name"
-            value={form.name}
-            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-            required
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-            required
-          />
-          <input
-            type="tel"
-            placeholder="Phone (optional)"
-            value={form.phone}
-            onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Confirm password"
-            value={form.confirmPassword}
-            onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
-            required
-          />
+          <label className="field-wrap">
+            <span>Full Name</span>
+            <input
+              type="text"
+              placeholder="Your name"
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="field-wrap">
+            <span>Email</span>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="field-wrap">
+            <span>Phone (optional)</span>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={form.phone}
+              onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+            />
+          </label>
+          <label className="field-wrap">
+            <span>Password</span>
+            <input
+              type="password"
+              placeholder="At least 8 characters"
+              value={form.password}
+              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="field-wrap">
+            <span>Confirm Password</span>
+            <input
+              type="password"
+              placeholder="Re-enter password"
+              value={form.confirmPassword}
+              onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+              required
+            />
+          </label>
+
           <button className="btn primary" type="submit" disabled={busy}>
-            {busy ? "Creating account..." : "Register"}
+            {busy ? "Creating account..." : "Create Account"}
           </button>
         </form>
 
@@ -119,6 +141,10 @@ export default function RegisterForm() {
         <p className="auth-copy">
           Already have an account? <Link href="/login">Login</Link>
         </p>
+        <p className="auth-copy">
+          Want to preview imported UI types? <Link href="/">Open UI Showcase</Link>
+        </p>
+        <p className="security-badge">Protected by rate limiting &amp; 2FA</p>
       </section>
     </main>
   );

@@ -5,6 +5,7 @@ import { hasGroupPermission } from "@/lib/access";
 import { enqueueSettlementNotification, processNotificationQueue } from "@/lib/notificationQueue";
 import { createRequestContext, errorDetails, logError, logInfo, newErrorId } from "@/lib/logger";
 import { hasWebPushConfig, sendWebPushBatch } from "@/lib/webPush";
+import { consumeRateLimit, getClientIp } from "@/lib/rateLimit";
 import { parseRequestBody, parseRouteParams, validationErrorResponse } from "@/lib/validation";
 import { z } from "zod";
 
@@ -24,6 +25,14 @@ async function resolveGroupId(paramsPromise) {
   return Number(params.id);
 }
 
+function rateLimitResponse(retryAfterMs) {
+  const seconds = Math.max(1, Math.ceil(Number(retryAfterMs || 0) / 1000));
+  return NextResponse.json(
+    { error: "Too many settlement reminders. Please wait before sending another reminder." },
+    { status: 429, headers: { "Retry-After": String(seconds) } }
+  );
+}
+
 export async function POST(request, { params }) {
   const { session, unauthorized } = requireAuth(request);
   if (unauthorized) return unauthorized;
@@ -35,6 +44,27 @@ export async function POST(request, { params }) {
     const groupId = await resolveGroupId(params);
     if (!Number.isFinite(groupId)) {
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 });
+    }
+    const userId = Number(session.userId || 0);
+    const ip = getClientIp(request);
+
+    const userLimit = consumeRateLimit({
+      key: `groups:${groupId}:settlements:notify:user:${userId}`,
+      limit: 8,
+      windowMs: 10 * 60 * 1000,
+      blockDurationMs: 10 * 60 * 1000,
+    });
+    if (!userLimit.allowed) return rateLimitResponse(userLimit.retryAfterMs);
+
+    const hasClientIp = ip && ip !== "0.0.0.0";
+    if (hasClientIp) {
+      const ipLimit = consumeRateLimit({
+        key: `groups:${groupId}:settlements:notify:ip:${ip}`,
+        limit: 25,
+        windowMs: 10 * 60 * 1000,
+        blockDurationMs: 10 * 60 * 1000,
+      });
+      if (!ipLimit.allowed) return rateLimitResponse(ipLimit.retryAfterMs);
     }
 
     const payload = await parseRequestBody(request, settlementNotifySchema, {
@@ -67,6 +97,47 @@ export async function POST(request, { params }) {
     const wantsEmail = ["email", "both", "all"].includes(channel);
     const wantsSms = ["sms", "both", "all"].includes(channel);
     const wantsWhatsapp = ["whatsapp", "all"].includes(channel);
+    const requestedChannels = [
+      wantsEmail ? "email" : null,
+      wantsSms ? "sms" : null,
+      wantsWhatsapp ? "whatsapp" : null,
+    ].filter(Boolean);
+
+    const recentCutoff = Date.now() - 3 * 60 * 1000;
+    const duplicateChannels = requestedChannels.filter((candidateChannel) =>
+      (group.notificationLogs || []).some((log) => {
+        const createdAtMs = new Date(log.createdAt || 0).getTime();
+        if (!Number.isFinite(createdAtMs) || createdAtMs < recentCutoff) return false;
+        if (Number(log.fromMemberId || 0) !== fromMemberId) return false;
+        if (Number(log.toMemberId || 0) !== toMemberId) return false;
+        if (Math.abs(Number(log.amount || 0) - amount) > 0.01) return false;
+        if (String(log.customMessage || "").trim() !== customMessage) return false;
+        if (String(log.channel || "").toLowerCase() !== candidateChannel) return false;
+        const status = String(log.status || "").toLowerCase();
+        return status === "queued" || status === "processing" || status === "sent";
+      })
+    );
+
+    if (requestedChannels.length > 0 && duplicateChannels.length === requestedChannels.length) {
+      const dedupedDelivery = {};
+      for (const candidateChannel of requestedChannels) {
+        dedupedDelivery[candidateChannel] = {
+          status: "deduped",
+          message: "A recent reminder already exists for this member pair.",
+        };
+      }
+      return NextResponse.json(
+        {
+          success: true,
+          deduped: true,
+          delivery: dedupedDelivery,
+          logsCreated: 0,
+          summary: "Recent reminder already exists. Skipped duplicate send.",
+        },
+        { status: 202 }
+      );
+    }
+
     const queued = [];
     if (wantsEmail) {
       delivery.email = { status: "queued", message: "Queued for delivery" };
@@ -157,6 +228,9 @@ export async function POST(request, { params }) {
     }
 
     await updateDB((draft) => {
+      if (!hasGroupPermission(draft, Number(group.id), session, "notifySettlement")) {
+        throw new Error("FORBIDDEN");
+      }
       appendActivity(draft, {
         groupId: Number(group.id),
         type: "settlement_reminder",
@@ -214,6 +288,9 @@ export async function POST(request, { params }) {
   } catch (error) {
     const response = validationErrorResponse(error);
     if (response) return response;
+    if (error.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Access denied for this group" }, { status: 403 });
+    }
     const errorId = newErrorId();
     const info = errorDetails(error, "Failed to notify settlement");
     logError("settlement.notify_failed", {

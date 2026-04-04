@@ -1,9 +1,18 @@
-const CACHE_NAME = "expense-split-pwa-v1";
+const CACHE_NAME = "expense-split-pwa-v2";
 const OFFLINE_URL = "/offline.html";
 const APP_SHELL = ["/", "/login", "/register", "/forgot-password", "/manifest.webmanifest", OFFLINE_URL];
 
 function shouldCacheAsset(pathname) {
   return /\.(?:js|css|png|jpg|jpeg|svg|webp|ico|woff2?|ttf)$/i.test(pathname);
+}
+
+function isAuthCriticalRequest(pathname) {
+  return (
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/profile") ||
+    pathname === "/ui/runtime-auth.js" ||
+    pathname.startsWith("/ui/runtime-auth.js?")
+  );
 }
 
 self.addEventListener("install", (event) => {
@@ -67,6 +76,16 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (isAuthCriticalRequest(url.pathname)) {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => Response.error()));
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/")) {
+    // Never cache generic API responses in SW cache.
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));

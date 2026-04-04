@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --experimental-default-type=module --test tests/*.test.js"
+    "test": "node --experimental-default-type=module --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "security:scan": "node scripts/scan-secrets.mjs",
+    "verify": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
     "next": "^16.2.1",
@@ -23,6 +26,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "eslint": "^9.39.1",
     "eslint-config-next": "16.1.6"
   }

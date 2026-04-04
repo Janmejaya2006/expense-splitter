@@ -106,8 +106,13 @@ export async function PATCH(request, { params }) {
     });
 
     const db = await updateDB((draft) => {
+      if (!hasGroupPermission(draft, id, session, "manageGroup")) {
+        throw new Error("FORBIDDEN");
+      }
       const group = draft.groups.find((item) => item.id === id);
-      if (!group) return draft;
+      if (!group) {
+        throw new Error("NOT_FOUND");
+      }
 
       if (body.name !== undefined) {
         group.name = body.name;
@@ -133,6 +138,12 @@ export async function PATCH(request, { params }) {
   } catch (error) {
     const response = validationErrorResponse(error);
     if (response) return response;
+    if (error.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Access denied for this group" }, { status: 403 });
+    }
+    if (error.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
 
     return NextResponse.json({ error: "Failed to update group" }, { status: 500 });
   }
@@ -153,8 +164,13 @@ export async function DELETE(request, { params }) {
     let deleted = false;
 
     await updateDB((draft) => {
+      if (!hasGroupPermission(draft, id, session, "deleteGroup")) {
+        throw new Error("FORBIDDEN");
+      }
       const groupIndex = draft.groups.findIndex((item) => item.id === id);
-      if (groupIndex === -1) return draft;
+      if (groupIndex === -1) {
+        throw new Error("NOT_FOUND");
+      }
 
       deleted = true;
       draft.groups.splice(groupIndex, 1);
@@ -178,6 +194,12 @@ export async function DELETE(request, { params }) {
   } catch (error) {
     const response = validationErrorResponse(error);
     if (response) return response;
+    if (error.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Access denied for this group" }, { status: 403 });
+    }
+    if (error.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
     return NextResponse.json({ error: "Failed to delete group" }, { status: 500 });
   }
 }

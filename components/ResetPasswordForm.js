@@ -36,7 +36,7 @@ export default function ResetPasswordForm({ token = "" }) {
         throw new Error(body.error || "Reset failed");
       }
 
-      router.replace("/");
+      router.replace("/login");
       router.refresh();
     } catch (err) {
       setError(err.message || "Reset failed");

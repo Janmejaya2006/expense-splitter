@@ -45,6 +45,7 @@ function rateLimitResponse(retryAfterMs) {
 export async function POST(request) {
   const ctx = createRequestContext(request, "auth.login");
   const ip = getClientIp(request);
+  const enforceRateLimit = process.env.NODE_ENV === "production";
   try {
     const body = await parseRequestBody(request, loginSchema, {
       invalidJsonMessage: "Invalid login payload",
@@ -55,21 +56,25 @@ export async function POST(request) {
       const challengeToken = String(body.challengeToken || "").trim();
       const otp = String(body.otp || "").trim();
 
-      const verifyIpLimit = consumeRateLimit({
-        key: `auth:login:verify-ip:${ip}`,
-        limit: 20,
-        windowMs: 15 * 60 * 1000,
-        blockDurationMs: 15 * 60 * 1000,
-      });
-      if (!verifyIpLimit.allowed) return rateLimitResponse(verifyIpLimit.retryAfterMs);
+      if (enforceRateLimit) {
+        const verifyIpLimit = consumeRateLimit({
+          key: `auth:login:verify-ip:${ip}`,
+          limit: 20,
+          windowMs: 15 * 60 * 1000,
+          blockDurationMs: 15 * 60 * 1000,
+        });
+        if (!verifyIpLimit.allowed) return rateLimitResponse(verifyIpLimit.retryAfterMs);
+      }
 
-      const challengeLimit = consumeRateLimit({
-        key: `auth:login:challenge:${challengeToken || "unknown"}`,
-        limit: 10,
-        windowMs: 15 * 60 * 1000,
-        blockDurationMs: 15 * 60 * 1000,
-      });
-      if (!challengeLimit.allowed) return rateLimitResponse(challengeLimit.retryAfterMs);
+      if (enforceRateLimit) {
+        const challengeLimit = consumeRateLimit({
+          key: `auth:login:challenge:${challengeToken || "unknown"}`,
+          limit: 10,
+          windowMs: 15 * 60 * 1000,
+          blockDurationMs: 15 * 60 * 1000,
+        });
+        if (!challengeLimit.allowed) return rateLimitResponse(challengeLimit.retryAfterMs);
+      }
 
       if (!challengeToken || !otp) {
         return NextResponse.json({ error: "Challenge token and OTP are required" }, { status: 400 });
@@ -130,22 +135,26 @@ export async function POST(request) {
     const email = String(body.email || "").trim();
     const password = String(body.password || "");
 
-    const requestIpLimit = consumeRateLimit({
-      key: `auth:login:request-ip:${ip}`,
-      limit: 14,
-      windowMs: 15 * 60 * 1000,
-      blockDurationMs: 15 * 60 * 1000,
-    });
-    if (!requestIpLimit.allowed) return rateLimitResponse(requestIpLimit.retryAfterMs);
+    if (enforceRateLimit) {
+      const requestIpLimit = consumeRateLimit({
+        key: `auth:login:request-ip:${ip}`,
+        limit: 14,
+        windowMs: 15 * 60 * 1000,
+        blockDurationMs: 15 * 60 * 1000,
+      });
+      if (!requestIpLimit.allowed) return rateLimitResponse(requestIpLimit.retryAfterMs);
+    }
 
     const emailKey = String(email || "").toLowerCase();
-    const requestEmailLimit = consumeRateLimit({
-      key: `auth:login:request-email:${emailKey || "unknown"}`,
-      limit: 10,
-      windowMs: 15 * 60 * 1000,
-      blockDurationMs: 15 * 60 * 1000,
-    });
-    if (!requestEmailLimit.allowed) return rateLimitResponse(requestEmailLimit.retryAfterMs);
+    if (enforceRateLimit) {
+      const requestEmailLimit = consumeRateLimit({
+        key: `auth:login:request-email:${emailKey || "unknown"}`,
+        limit: 10,
+        windowMs: 15 * 60 * 1000,
+        blockDurationMs: 15 * 60 * 1000,
+      });
+      if (!requestEmailLimit.allowed) return rateLimitResponse(requestEmailLimit.retryAfterMs);
+    }
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -209,6 +218,27 @@ export async function POST(request) {
         expiresAt: challenge.expiresAt,
       });
     } catch {
+      if (process.env.NODE_ENV !== "production") {
+        logWarn("auth.login_otp_delivery_preview_fallback", {
+          requestId: ctx.requestId,
+          ip,
+          email: maskEmail(email),
+        });
+        return NextResponse.json({
+          success: true,
+          requiresOtp: true,
+          challengeToken: challenge.challengeToken,
+          expiresAt: challenge.expiresAt,
+          maskedEmail: maskEmail(challenge.user?.email || email),
+          delivery: {
+            channel: "email",
+            status: "preview",
+            message: "Email provider unavailable in development. Use the preview OTP below.",
+          },
+          previewOtpCode: challenge.otpCode,
+        });
+      }
+
       await revokeLoginOtpChallenge(challenge.challengeToken);
       logError("auth.login_otp_delivery_failed", {
         requestId: ctx.requestId,

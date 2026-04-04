@@ -1,5 +1,5 @@
 "use client";
-
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -7,9 +7,11 @@ export default function VerifyEmailCard({ token = "" }) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
+    let redirectTimer = null;
 
     async function verify() {
       if (!token) {
@@ -32,6 +34,7 @@ export default function VerifyEmailCard({ token = "" }) {
         }
         if (!cancelled) {
           setNotice("Your email has been verified. You are now signed in.");
+          redirectTimer = setTimeout(() => router.replace("/groups"), 1500);
         }
       } catch (err) {
         if (!cancelled) {
@@ -47,8 +50,11 @@ export default function VerifyEmailCard({ token = "" }) {
     verify();
     return () => {
       cancelled = true;
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+      }
     };
-  }, [token]);
+  }, [token, router]);
 
   return (
     <main className="auth-shell">
@@ -62,7 +68,7 @@ export default function VerifyEmailCard({ token = "" }) {
         {notice ? <p className="auth-copy">{notice}</p> : null}
         {error ? <p className="auth-error">{error}</p> : null}
         <p className="auth-copy">
-          Continue to <Link href={notice ? "/" : "/login"}>{notice ? "Dashboard" : "Login"}</Link>
+          Continue to <Link href={notice ? "/groups" : "/login"}>{notice ? "Go to dashboard" : "Login"}</Link>
         </p>
       </section>
     </main>

@@ -1,8 +1,5 @@
-import InviteAcceptCard from "@/components/InviteAcceptCard";
+import { redirect } from "next/navigation";
 
-export default async function InvitePage({ params }) {
-  const resolved = await params;
-  const token = String(resolved?.token || "");
-
-  return <InviteAcceptCard token={token} />;
+export default function InvitePage() {
+  redirect("/");
 }
