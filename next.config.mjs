@@ -13,8 +13,18 @@ const nextConfig = {
   async rewrites() {
     return {
       beforeFiles: [
-        // Keep /login, /register, and /signup on App Router pages so auth cookies
-        // and redirect flows are handled by the server-rendered routes.
+        {
+          source: "/login",
+          destination: "/ui/index.html",
+        },
+        {
+          source: "/signup",
+          destination: "/ui/index.html",
+        },
+        {
+          source: "/register",
+          destination: "/ui/index.html",
+        },
         {
           source: "/create-group",
           destination: "/ui/index.html",
