@@ -13427,14 +13427,27 @@
     syncProfileAvatarUi(sanitizeAvatarUrl(session.avatarUrl || ""), session);
   }
 
-  function summarizeUserNet(groupDetail, sessionUserId) {
+  function summarizeUserNet(groupDetail, sessionUserId, sessionEmail = "") {
     const members = Array.isArray(groupDetail?.members) ? groupDetail.members : [];
     const balances = Array.isArray(groupDetail?.summary?.balances) ? groupDetail.summary.balances : [];
     if (!members.length || !balances.length) return 0;
 
+    const normalizedSessionEmail = safeLower(sessionEmail || "");
     const memberIds = new Set(
       members
-        .filter((member) => Number(member.userId || 0) === Number(sessionUserId || 0))
+        .filter((member) => {
+          const memberUserId = Number(member.userId || 0);
+          if (
+            memberUserId > 0 &&
+            Number(sessionUserId || 0) > 0 &&
+            memberUserId === Number(sessionUserId || 0)
+          ) {
+            return true;
+          }
+
+          const memberEmail = safeLower(member.email || "");
+          return Boolean(memberEmail && normalizedSessionEmail && memberEmail === normalizedSessionEmail);
+        })
         .map((member) => Number(member.id))
     );
 
@@ -13770,7 +13783,13 @@
 
       const groupsData = groups.map((group, index) => {
         const detail = details.find((item) => Number(item?.id || 0) === Number(group.id)) || null;
-        const userNet = detail ? summarizeUserNet(detail, Number(session?.userId || 0)) : 0;
+        const userNet = detail
+          ? summarizeUserNet(
+              detail,
+              Number(session?.userId || 0),
+              String(session?.email || "")
+            )
+          : 0;
         const lastActivityAt = detail ? resolveLatestActivityFromGroup(detail) : group?.createdAt || "";
         return {
           id: Number(group.id),
